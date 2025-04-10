@@ -50,7 +50,7 @@ FarmWise AI is designed to bridge the gap between government agricultural scheme
 
 6. Run the application:
    ```
-   python -m streamlit run app.py
+   python -m streamlit run scheme_summarizer.py
    ```
 
 ## 📱 Usage

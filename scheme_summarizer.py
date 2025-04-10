@@ -266,7 +266,7 @@ with tab1:
             with st.form("eligibility_form"):
                 responses = {}
                 for i, question in enumerate(display_questions):
-                    responses[f"q{i}"] = st.radio(question, ["Yes", "No"])
+                    responses[f"q{i}"] = st.radio(question, ["Yes", "No"], index=1)
                 
                 submitted = st.form_submit_button("Check Eligibility")
                 
@@ -274,9 +274,13 @@ with tab1:
                     # Prepare responses for analysis using original English questions
                     formatted_responses = "\n".join([f"Q: {original_questions[i]}\nA: {responses[f'q{i}']}" for i in range(len(original_questions)) if i < len(display_questions)])
                     
+                    # Debug: Show the responses that are being sent
+                    # st.write("Debug - Your responses:")
+                    # st.code(formatted_responses)
+                    
                     eligibility_check_prompt = ChatPromptTemplate.from_messages([
-                        ("system", "You are an expert in government agricultural schemes. Based on the scheme document and the farmer's responses to eligibility questions, determine if they are eligible for the scheme. Start your response with either 'ELIGIBLE: ' or 'NOT ELIGIBLE: ' followed by a clear explanation of your decision and any next steps they should take. If they are eligible, provide information on how to apply."),
-                        ("human", f"Scheme document: {text[:5000]}\n\nFarmer's responses:\n{formatted_responses}\n\nIs the farmer eligible for this scheme? Explain why or why not, and provide next steps.")
+                        ("system", "You are an expert in government agricultural schemes. Based on the scheme document and the farmer's responses to eligibility questions, determine if they are eligible for the scheme. IMPORTANT: Start your response with exactly 'ELIGIBLE: ' (if they qualify) or 'NOT ELIGIBLE: ' (if they don't qualify) followed by a clear explanation of your decision and any next steps they should take. If they are eligible, provide information on how to apply."),
+                        ("human", f"Scheme document: {text[:5000]}\n\nFarmer's responses:\n{formatted_responses}\n\nBased on these responses, is the farmer eligible for this scheme? Start with ELIGIBLE: or NOT ELIGIBLE: followed by your explanation.")
                     ])
                     
                     eligibility_check_chain = eligibility_check_prompt | llm
@@ -287,7 +291,12 @@ with tab1:
                     st.session_state.eligibility_result = eligibility_result
                     
                     # Determine if eligible from the response
-                    is_eligible = eligibility_result.upper().startswith("ELIGIBLE:")
+                    is_eligible = eligibility_result.upper().startswith("ELIGIBLE:") and not eligibility_result.upper().startswith("NOT ELIGIBLE:")
+                    
+                    # Debug: Show the raw eligibility result
+                    # st.write("Debug - Eligibility response from AI:")
+                    # st.code(eligibility_result[:100] + "...")  # Show the first 100 characters
+                    # st.write(f"Debug - is_eligible set to: {is_eligible}")
                     
                     st.subheader("Eligibility Result")
                     

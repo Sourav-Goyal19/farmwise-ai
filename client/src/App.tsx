@@ -1,14 +1,15 @@
 import "./App.css";
+import Chat from "./components/chat";
 import { AgriculturalSubsidyForm } from "./components/subsidy-form";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 
 function App() {
   return (
-    <div className="p-12">
+    <div className="p-">
       <Router>
-        <a href="/subsidy">Subsidy</a>
         <Routes>
           <Route path="/subsidy" element={<AgriculturalSubsidyForm />} />
+          <Route path="/chat" element={<Chat />} />
         </Routes>
       </Router>
     </div>

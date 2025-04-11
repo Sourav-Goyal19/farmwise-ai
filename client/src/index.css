@@ -118,3 +118,13 @@
     @apply bg-background text-foreground;
   }
 }
+
+body::-webkit-scrollbar {
+  width: 5px;
+}
+
+body::-webkit-scrollbar-thumb {
+  /* width: 3px; */
+  border-radius: 10px;
+  background: rgb(2, 56, 27);
+}

@@ -1,0 +1,40 @@
+{% extends "layout.html" %}
+
+{% block title %}Login{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card scheme-card">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">Login / Register</h4>
+                </div>
+                <div class="card-body">
+                    {% if error %}
+                    <div class="alert alert-danger">{{ error }}</div>
+                    {% endif %}
+                    
+                    <form action="{{ url_for('login') }}" method="post">
+                        <div class="mb-3">
+                            <label for="name" class="form-label">Your Name</label>
+                            <input type="text" class="form-control" id="name" name="name" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="phone" class="form-label">Phone Number</label>
+                            <input type="text" class="form-control" id="phone" name="phone" placeholder="10 digit phone number" required>
+                            <div class="form-text">Please enter a valid 10-digit phone number.</div>
+                        </div>
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary">Login / Register</button>
+                        </div>
+                    </form>
+                </div>
+                <div class="card-footer">
+                    <p class="mb-0">FarmWise AI only collects your name and phone number to save your scheme preferences.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

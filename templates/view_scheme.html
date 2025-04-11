@@ -1,0 +1,146 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ scheme_title }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card scheme-card">
+                <div class="card-header bg-success text-white">
+                    <h4 class="mb-0">{{ scheme_title }}</h4>
+                </div>
+                <div class="card-body">
+                    <h5>Summary</h5>
+                    <div class="p-3 border rounded mb-4">
+                        {{ summary|safe }}
+                    </div>
+                    
+                    <div class="d-flex justify-content-between mb-4">
+                        <a href="{{ url_for('generate_audio') }}" class="btn btn-outline-primary" target="_blank">
+                            <i class="bi bi-volume-up"></i> Listen to Audio
+                        </a>
+                        
+                        {% if session.get('user_id') %}
+                        <button id="save-scheme-btn" class="btn btn-outline-success">
+                            <i class="bi bi-bookmark-plus"></i> Save This Scheme
+                        </button>
+                        {% else %}
+                        <a href="{{ url_for('login') }}" class="btn btn-outline-success">
+                            <i class="bi bi-box-arrow-in-right"></i> Login to Save Scheme
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card scheme-card mt-4">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">Check Your Eligibility</h4>
+                </div>
+                <div class="card-body">
+                    <p>Answer a few questions to check if you're eligible for this scheme:</p>
+                    
+                    <form id="eligibility-form">
+                        {% for question in questions %}
+                        <div class="mb-3">
+                            <label class="form-label">{{ question }}</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="q{{ loop.index0 }}" id="q{{ loop.index0 }}_yes" value="Yes">
+                                <label class="form-check-label" for="q{{ loop.index0 }}_yes">Yes</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="q{{ loop.index0 }}" id="q{{ loop.index0 }}_no" value="No" checked>
+                                <label class="form-check-label" for="q{{ loop.index0 }}_no">No</label>
+                            </div>
+                        </div>
+                        {% endfor %}
+                        
+                        <button type="submit" class="btn btn-primary" id="check-eligibility-btn">Check Eligibility</button>
+                        <div class="spinner-border text-primary d-none" id="eligibility-spinner" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </form>
+                    
+                    <div id="eligibility-result" class="mt-4 d-none">
+                        <h5>Eligibility Result</h5>
+                        <div id="result-content" class="p-3 border rounded"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(document).ready(function() {
+    // Handle eligibility form submission
+    $('#eligibility-form').on('submit', function(e) {
+        e.preventDefault();
+        
+        // Show spinner, hide button
+        $('#check-eligibility-btn').addClass('d-none');
+        $('#eligibility-spinner').removeClass('d-none');
+        
+        // Get form data
+        var formData = $(this).serialize();
+        
+        // Send AJAX request
+        $.ajax({
+            url: '{{ url_for("check_eligibility") }}',
+            type: 'POST',
+            data: formData,
+            success: function(response) {
+                // Hide spinner, show button
+                $('#check-eligibility-btn').removeClass('d-none');
+                $('#eligibility-spinner').addClass('d-none');
+                
+                // Show result
+                $('#eligibility-result').removeClass('d-none');
+                
+                if (response.is_eligible) {
+                    $('#result-content').removeClass('alert-warning').addClass('alert-success');
+                } else {
+                    $('#result-content').removeClass('alert-success').addClass('alert-warning');
+                }
+                
+                $('#result-content').html(response.result).addClass('alert');
+            },
+            error: function() {
+                // Hide spinner, show button
+                $('#check-eligibility-btn').removeClass('d-none');
+                $('#eligibility-spinner').addClass('d-none');
+                
+                // Show error
+                $('#eligibility-result').removeClass('d-none');
+                $('#result-content').html('An error occurred. Please try again.').addClass('alert alert-danger');
+            }
+        });
+    });
+    
+    // Handle save scheme button
+    $('#save-scheme-btn').on('click', function() {
+        $.ajax({
+            url: '{{ url_for("save_scheme") }}',
+            type: 'POST',
+            success: function(response) {
+                if (response.success) {
+                    alert(response.message);
+                } else {
+                    alert('Error: ' + response.error);
+                }
+            },
+            error: function(xhr) {
+                let errorMsg = 'An error occurred.';
+                if (xhr.responseJSON && xhr.responseJSON.error) {
+                    errorMsg = xhr.responseJSON.error;
+                }
+                alert('Error: ' + errorMsg);
+            }
+        });
+    });
+});
+</script>
+{% endblock %} 

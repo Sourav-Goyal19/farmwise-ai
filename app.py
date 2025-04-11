@@ -1,0 +1,523 @@
+from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, session
+import os
+from dotenv import load_dotenv
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.prompts import ChatPromptTemplate
+from PyPDF2 import PdfReader
+import io
+import base64
+import re
+import db_utils
+import audio_utils
+import sqlite3
+import time
+
+# Load environment variables
+load_dotenv()
+
+# Initialize Flask app
+app = Flask(__name__)
+app.secret_key = os.urandom(24)  # For session management
+
+# API key validation
+api_key = os.getenv("GOOGLE_API_KEY")
+if not api_key:
+    raise ValueError("GOOGLE_API_KEY is not set in the .env file.")
+
+# Initialize LLM
+llm = ChatGoogleGenerativeAI(
+    model="gemini-2.0-flash",
+    api_key=api_key
+)
+
+# Get supported languages
+supported_langs = audio_utils.get_supported_languages()
+
+# Filter the language dictionary to only include supported languages
+languages = {
+    "English": "en",
+    "Hindi": "hi",
+    "Tamil": "ta",
+    "Telugu": "te",
+    "Bengali": "bn",
+    "Marathi": "mr",
+    "Gujarati": "gu",
+    "Kannada": "kn",
+    "Malayalam": "ml"
+}
+
+# Filter out unsupported languages
+languages = {k: v for k, v in languages.items() if audio_utils.is_language_supported(v)}
+
+@app.route('/')
+def index():
+    # Main page with scheme upload functionality
+    return render_template('index.html', languages=languages)
+
+@app.route('/set_language', methods=['POST'])
+def set_language():
+    # Set the language preference
+    language = request.form.get('language', 'en')
+    session['language'] = language
+    return redirect(url_for('index'))
+
+@app.route('/upload_scheme', methods=['POST'])
+def upload_scheme():
+    if 'scheme_file' not in request.files:
+        return jsonify({'error': 'No file part'}), 400
+    
+    file = request.files['scheme_file']
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+    
+    if file and file.filename.endswith('.pdf'):
+        # Process the PDF
+        try:
+            pdf_reader = PdfReader(file, strict=False)
+            text = ""
+            for page in pdf_reader.pages:
+                try:
+                    page_text = page.extract_text()
+                    if page_text:
+                        text += page_text
+                except Exception as e:
+                    return jsonify({'error': f'Warning: Could not extract text from a page: {e}'}), 400
+            
+            if not text.strip():
+                return jsonify({'error': 'Could not extract any text from the uploaded PDF'}), 400
+            
+            # Store in session
+            session['document_text'] = text
+            
+            # Extract scheme title
+            title_prompt = ChatPromptTemplate.from_messages([
+                ("system", "You are an expert in government agricultural schemes. Extract the exact title of the scheme from the provided document. Return ONLY the title as a single line, without any additional text or explanation."),
+                ("human", f"Extract the title from this document: {text[:5000]}")
+            ])
+            
+            title_chain = title_prompt | llm
+            title_response = title_chain.invoke({})
+            scheme_title = title_response.content if hasattr(title_response, "content") else title_response
+            scheme_title = scheme_title.strip()
+            
+            # Store in session
+            session['scheme_title'] = scheme_title
+            
+            # Analyze the scheme
+            summary_prompt = ChatPromptTemplate.from_messages([
+                ("system", "You are an expert in government agricultural schemes. Your task is to analyze the provided government scheme document and create a simple, easy-to-understand summary for farmers. Focus on the key benefits, eligibility criteria, and application process. Use simple language that a person with basic education can understand."),
+                ("human", f"Please analyze this government agricultural scheme document and provide a summary in simple language: {text[:15000]}")
+            ])
+            
+            summary_chain = summary_prompt | llm
+            summary_response = summary_chain.invoke({})
+            summary = summary_response.content if hasattr(summary_response, "content") else summary_response
+            
+            # Store in session
+            session['scheme_summary'] = summary
+            
+            # Generate eligibility questions
+            eligibility_prompt = ChatPromptTemplate.from_messages([
+                ("system", "You are an expert in government agricultural schemes. Extract the key eligibility criteria from the provided document. Then generate 5-7 simple yes/no questions that can determine if a farmer is eligible for the scheme. Return ONLY the questions, one per line, without any numbering or additional text."),
+                ("human", f"Extract eligibility criteria questions from this scheme document: {text[:15000]}")
+            ])
+            
+            eligibility_chain = eligibility_prompt | llm
+            eligibility_response = eligibility_chain.invoke({})
+            eligibility_questions = eligibility_response.content if hasattr(eligibility_response, "content") else eligibility_response
+            
+            # Store eligibility questions in session
+            session['scheme_eligibility'] = eligibility_questions
+            
+            # Keep original English questions
+            original_questions = [q.strip() for q in eligibility_questions.strip().split("\n") if q.strip()]
+            session['original_questions'] = original_questions
+            
+            return jsonify({
+                'success': True,
+                'redirect': url_for('view_scheme')
+            })
+        
+        except Exception as e:
+            return jsonify({'error': f'Error processing PDF: {e}'}), 500
+    
+    return jsonify({'error': 'Invalid file type, please upload a PDF'}), 400
+
+@app.route('/view_scheme')
+def view_scheme():
+    # Display the analyzed scheme
+    if 'scheme_title' not in session or 'scheme_summary' not in session:
+        return redirect(url_for('index'))
+    
+    language_code = session.get('language', 'en')
+    selected_language = [k for k, v in languages.items() if v == language_code][0]
+    
+    scheme_title = session['scheme_title']
+    summary = session['scheme_summary']
+    
+    # If not English, translate the summary
+    if language_code != "en":
+        translation_prompt = ChatPromptTemplate.from_messages([
+            ("system", f"You are a translator. Translate the following text from English to {selected_language} maintaining the meaning and simplicity. Return ONLY the translated text without any additional explanations or notes."),
+            ("human", summary)
+        ])
+        translation_chain = translation_prompt | llm
+        translation_response = translation_chain.invoke({})
+        translated_summary = translation_response.content if hasattr(translation_response, "content") else translation_response
+        display_summary = translated_summary
+    else:
+        display_summary = summary
+    
+    # Get eligibility questions
+    eligibility_questions = session.get('scheme_eligibility', '')
+    original_questions = session.get('original_questions', [])
+    
+    # Translate eligibility questions if not in English
+    if language_code != "en":
+        translation_prompt = ChatPromptTemplate.from_messages([
+            ("system", f"You are a translator. Translate the following questions from English to {selected_language} maintaining the meaning and simplicity. Keep the same format with one question per line."),
+            ("human", eligibility_questions)
+        ])
+        translation_chain = translation_prompt | llm
+        translation_response = translation_chain.invoke({})
+        translated_questions = translation_response.content if hasattr(translation_response, "content") else translation_response
+        
+        # Split translated questions
+        display_questions = [q.strip() for q in translated_questions.strip().split("\n") if q.strip()]
+    else:
+        # Use original questions for display
+        display_questions = original_questions
+    
+    return render_template(
+        'view_scheme.html',
+        scheme_title=scheme_title,
+        summary=display_summary,
+        questions=display_questions,
+        language=selected_language,
+        language_code=language_code
+    )
+
+@app.route('/generate_audio')
+def generate_audio():
+    if 'scheme_summary' not in session:
+        return jsonify({'error': 'No scheme summary available'}), 400
+    
+    language_code = session.get('language', 'en')
+    summary = session['scheme_summary']
+    
+    # If not English, translate
+    if language_code != "en":
+        selected_language = [k for k, v in languages.items() if v == language_code][0]
+        translation_prompt = ChatPromptTemplate.from_messages([
+            ("system", f"You are a translator. Translate the following text from English to {selected_language} maintaining the meaning and simplicity. Return ONLY the translated text without any additional explanations or notes."),
+            ("human", summary)
+        ])
+        translation_chain = translation_prompt | llm
+        translation_response = translation_chain.invoke({})
+        tts_text = translation_response.content if hasattr(translation_response, "content") else translation_response
+    else:
+        tts_text = summary
+    
+    try:
+        # Generate audio
+        audio_bytes, _ = audio_utils.generate_audio(tts_text, language_code)
+        if audio_bytes:
+            audio_bytes.seek(0)
+            return send_file(
+                audio_bytes,
+                mimetype='audio/mp3',
+                as_attachment=True,
+                download_name=f"scheme_summary_{language_code}.mp3"
+            )
+        else:
+            return jsonify({'error': 'Failed to generate audio'}), 500
+    except Exception as e:
+        return jsonify({'error': f'Error generating audio: {e}'}), 500
+
+@app.route('/check_eligibility', methods=['POST'])
+def check_eligibility():
+    if 'document_text' not in session or 'original_questions' not in session:
+        return jsonify({'error': 'No scheme data available'}), 400
+    
+    text = session['document_text']
+    original_questions = session['original_questions']
+    
+    # Get responses from form
+    responses = {}
+    for i, _ in enumerate(original_questions):
+        responses[f'q{i}'] = request.form.get(f'q{i}', 'No')
+    
+    # Prepare responses for analysis
+    formatted_responses = "\n".join([f"Q: {original_questions[i]}\nA: {responses[f'q{i}']}" for i in range(len(original_questions))])
+    
+    # Check eligibility
+    eligibility_check_prompt = ChatPromptTemplate.from_messages([
+        ("system", "You are an expert in government agricultural schemes. Based on the scheme document and the farmer's responses to eligibility questions, determine if they are eligible for the scheme. IMPORTANT: Start your response with exactly 'ELIGIBLE: ' (if they qualify) or 'NOT ELIGIBLE: ' (if they don't qualify) followed by a clear explanation of your decision and any next steps they should take. If they are eligible, provide information on how to apply."),
+        ("human", f"Scheme document: {text[:5000]}\n\nFarmer's responses:\n{formatted_responses}\n\nBased on these responses, is the farmer eligible for this scheme? Start with ELIGIBLE: or NOT ELIGIBLE: followed by your explanation.")
+    ])
+    
+    eligibility_check_chain = eligibility_check_prompt | llm
+    eligibility_check_response = eligibility_check_chain.invoke({})
+    eligibility_result = eligibility_check_response.content if hasattr(eligibility_check_response, "content") else eligibility_check_response
+    
+    # Store eligibility result in session
+    session['eligibility_result'] = eligibility_result
+    
+    # Determine if eligible from the response
+    is_eligible = eligibility_result.upper().startswith("ELIGIBLE:") and not eligibility_result.upper().startswith("NOT ELIGIBLE:")
+    
+    # Translate eligibility result if not in English
+    language_code = session.get('language', 'en')
+    if language_code != "en":
+        selected_language = [k for k, v in languages.items() if v == language_code][0]
+        translation_prompt = ChatPromptTemplate.from_messages([
+            ("system", f"You are a translator. Translate the following text from English to {selected_language} maintaining the meaning and simplicity. Return ONLY the translated text without any additional explanations or notes."),
+            ("human", eligibility_result)
+        ])
+        translation_chain = translation_prompt | llm
+        translation_response = translation_chain.invoke({})
+        translated_eligibility = translation_response.content if hasattr(translation_response, "content") else translation_response
+        display_result = translated_eligibility
+    else:
+        display_result = eligibility_result
+    
+    return jsonify({
+        'success': True,
+        'is_eligible': is_eligible,
+        'result': display_result
+    })
+
+@app.route('/save_scheme', methods=['POST'])
+def save_scheme():
+    if 'user_id' not in session:
+        return jsonify({'error': 'Please log in to save this scheme'}), 401
+    
+    if ('scheme_title' not in session or 'scheme_summary' not in session or 
+        'scheme_eligibility' not in session or 'eligibility_result' not in session):
+        return jsonify({'error': 'No scheme data available to save'}), 400
+    
+    scheme_title = session['scheme_title']
+    scheme_summary = session['scheme_summary']
+    eligibility_questions = session['scheme_eligibility']
+    eligibility_result = session['eligibility_result']
+    document_text = session.get('document_text', '')
+    
+    # Determine if eligible from the response
+    is_eligible = eligibility_result.upper().startswith("ELIGIBLE:") and not eligibility_result.upper().startswith("NOT ELIGIBLE:")
+    
+    try:
+        # Save to database
+        scheme_id = db_utils.save_scheme(
+            title=scheme_title,
+            description="Uploaded scheme",
+            eligibility_criteria=eligibility_questions,
+            summary=scheme_summary,
+            document_text=document_text
+        )
+        
+        db_utils.save_user_scheme(
+            user_id=session['user_id'],
+            scheme_id=scheme_id,
+            is_eligible=is_eligible,
+            eligibility_details=eligibility_result
+        )
+        
+        return jsonify({'success': True, 'message': 'Scheme saved to your list!'})
+    
+    except Exception as e:
+        return jsonify({'error': f'Error saving scheme: {e}'}), 500
+
+@app.route('/my_schemes')
+def my_schemes():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
+    user_schemes = db_utils.get_user_schemes(session['user_id'])
+    language_code = session.get('language', 'en')
+    
+    return render_template(
+        'my_schemes.html',
+        schemes=user_schemes,
+        language_code=language_code,
+        languages=languages
+    )
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'GET':
+        return render_template('login.html')
+    
+    if request.method == 'POST':
+        name = request.form.get('name', '')
+        phone = request.form.get('phone', '')
+        language_code = session.get('language', 'en')
+        
+        if name and phone:
+            # Validate phone number (basic validation)
+            if re.match(r'^\d{10}$', phone):
+                user_id = db_utils.get_or_create_user(name, phone, language_code)
+                session['user_id'] = user_id
+                session['user_name'] = name
+                return redirect(url_for('index'))
+            else:
+                return render_template('login.html', error="Please enter a valid 10-digit phone number")
+        else:
+            return render_template('login.html', error="Please enter your name and phone number")
+
+@app.route('/logout')
+def logout():
+    session.pop('user_id', None)
+    session.pop('user_name', None)
+    return redirect(url_for('index'))
+
+@app.route('/help')
+def help_page():
+    return render_template('help.html')
+
+@app.route('/translate_scheme_summary')
+def translate_scheme_summary():
+    if 'user_id' not in session:
+        return jsonify({'error': 'Please log in to view translations'}), 401
+    
+    scheme_id = request.args.get('scheme_id')
+    if not scheme_id:
+        return jsonify({'error': 'No scheme ID provided'}), 400
+    
+    language_code = session.get('language', 'en')
+    if language_code == 'en':
+        return jsonify({'error': 'Translation not needed for English'}), 400
+    
+    # Get the scheme from the database
+    try:
+        conn = sqlite3.connect(db_utils.DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT summary FROM schemes WHERE id = ?", (scheme_id,))
+        scheme = cursor.fetchone()
+        conn.close()
+        
+        if not scheme:
+            return jsonify({'error': 'Scheme not found'}), 404
+        
+        summary = scheme['summary']
+        selected_language = [k for k, v in languages.items() if v == language_code][0]
+        
+        # Translate the summary
+        translation_prompt = ChatPromptTemplate.from_messages([
+            ("system", f"You are a translator. Translate the following text from English to {selected_language} maintaining the meaning and simplicity. Return ONLY the translated text without any additional explanations or notes."),
+            ("human", summary)
+        ])
+        translation_chain = translation_prompt | llm
+        translation_response = translation_chain.invoke({})
+        translated_text = translation_response.content if hasattr(translation_response, "content") else translation_response
+        
+        return jsonify({'translated_text': translated_text})
+    except Exception as e:
+        return jsonify({'error': f'Error translating text: {e}'}), 500
+
+@app.route('/translate_eligibility_details')
+def translate_eligibility_details():
+    if 'user_id' not in session:
+        return jsonify({'error': 'Please log in to view translations'}), 401
+    
+    scheme_id = request.args.get('scheme_id')
+    if not scheme_id:
+        return jsonify({'error': 'No scheme ID provided'}), 400
+    
+    language_code = session.get('language', 'en')
+    if language_code == 'en':
+        return jsonify({'error': 'Translation not needed for English'}), 400
+    
+    # Get the eligibility details from the database
+    try:
+        conn = sqlite3.connect(db_utils.DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT eligibility_details FROM user_schemes WHERE user_id = ? AND scheme_id = ?", 
+            (session['user_id'], scheme_id)
+        )
+        user_scheme = cursor.fetchone()
+        conn.close()
+        
+        if not user_scheme:
+            return jsonify({'error': 'Scheme not found'}), 404
+        
+        eligibility_details = user_scheme['eligibility_details']
+        selected_language = [k for k, v in languages.items() if v == language_code][0]
+        
+        # Translate the eligibility details
+        translation_prompt = ChatPromptTemplate.from_messages([
+            ("system", f"You are a translator. Translate the following text from English to {selected_language} maintaining the meaning and simplicity. Return ONLY the translated text without any additional explanations or notes."),
+            ("human", eligibility_details)
+        ])
+        translation_chain = translation_prompt | llm
+        translation_response = translation_chain.invoke({})
+        translated_text = translation_response.content if hasattr(translation_response, "content") else translation_response
+        
+        return jsonify({'translated_text': translated_text})
+    except Exception as e:
+        return jsonify({'error': f'Error translating text: {e}'}), 500
+
+@app.route('/generate_scheme_audio')
+def generate_scheme_audio():
+    if 'user_id' not in session:
+        return jsonify({'error': 'Please log in to generate audio'}), 401
+    
+    scheme_id = request.args.get('scheme_id')
+    if not scheme_id:
+        return jsonify({'error': 'No scheme ID provided'}), 400
+    
+    # Get the scheme from the database
+    try:
+        conn = sqlite3.connect(db_utils.DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT summary FROM schemes WHERE id = ?", (scheme_id,))
+        scheme = cursor.fetchone()
+        conn.close()
+        
+        if not scheme:
+            return jsonify({'error': 'Scheme not found'}), 404
+        
+        summary = scheme['summary']
+        language_code = session.get('language', 'en')
+        
+        # If not English, translate
+        if language_code != "en":
+            selected_language = [k for k, v in languages.items() if v == language_code][0]
+            translation_prompt = ChatPromptTemplate.from_messages([
+                ("system", f"You are a translator. Translate the following text from English to {selected_language} maintaining the meaning and simplicity. Return ONLY the translated text without any additional explanations or notes."),
+                ("human", summary)
+            ])
+            translation_chain = translation_prompt | llm
+            translation_response = translation_chain.invoke({})
+            tts_text = translation_response.content if hasattr(translation_response, "content") else translation_response
+        else:
+            tts_text = summary
+        
+        # Create a temporary audio file
+        audio_bytes, _ = audio_utils.generate_audio(tts_text, language_code)
+        if audio_bytes:
+            timestamp = int(time.time())
+            filename = f"scheme_{scheme_id}_{timestamp}.mp3"
+            
+            # Create temporary file
+            temp_dir = os.path.join(os.getcwd(), 'static', 'temp_audio')
+            os.makedirs(temp_dir, exist_ok=True)
+            temp_file = os.path.join(temp_dir, filename)
+            
+            audio_bytes.seek(0)
+            with open(temp_file, 'wb') as f:
+                f.write(audio_bytes.read())
+            
+            # Return URL to the audio file
+            audio_url = url_for('static', filename=f'temp_audio/{filename}')
+            return jsonify({'audio_url': audio_url})
+        else:
+            return jsonify({'error': 'Failed to generate audio'}), 500
+    except Exception as e:
+        return jsonify({'error': f'Error generating audio: {e}'}), 500
+
+if __name__ == '__main__':
+    app.run(debug=True) 

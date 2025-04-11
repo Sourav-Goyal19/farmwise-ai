@@ -1,0 +1,161 @@
+{% extends "layout.html" %}
+
+{% block title %}My Schemes{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row">
+        <div class="col-md-12">
+            <h3 class="mb-4">My Saved Schemes</h3>
+            
+            {% if not session.get('user_id') %}
+                <div class="alert alert-info">
+                    Please <a href="{{ url_for('login') }}">login</a> to view your saved schemes.
+                </div>
+            {% elif schemes|length == 0 %}
+                <div class="alert alert-info">
+                    You haven't saved any schemes yet. Go to the <a href="{{ url_for('index') }}">Analyze Scheme</a> tab to analyze and save schemes.
+                </div>
+            {% else %}
+                <div class="accordion" id="schemesAccordion">
+                    {% for scheme in schemes %}
+                    <div class="accordion-item mb-3 scheme-card">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button {% if not loop.first %}collapsed{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#scheme{{ scheme.id }}">
+                                {{ scheme.title }} 
+                                <span class="badge ms-2 {% if scheme.is_eligible %}bg-success{% else %}bg-warning{% endif %}">
+                                    {% if scheme.is_eligible %}Eligible{% else %}Not Eligible{% endif %}
+                                </span>
+                            </button>
+                        </h2>
+                        <div id="scheme{{ scheme.id }}" class="accordion-collapse collapse {% if loop.first %}show{% endif %}" data-bs-parent="#schemesAccordion">
+                            <div class="accordion-body">
+                                <p><strong>Date Saved:</strong> {{ scheme.saved_at }}</p>
+                                
+                                <h5 class="mt-3">Summary</h5>
+                                <div class="p-3 border rounded mb-3">
+                                    {% if language_code != 'en' %}
+                                    <div class="summary-translation" data-scheme-id="{{ scheme.id }}">
+                                        <div class="spinner-border spinner-border-sm text-primary" role="status">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
+                                        Translating...
+                                    </div>
+                                    {% else %}
+                                    {{ scheme.summary|safe }}
+                                    {% endif %}
+                                </div>
+                                
+                                <h5 class="mt-3">Eligibility Details</h5>
+                                <div class="p-3 border rounded mb-3 {% if scheme.is_eligible %}alert-success{% else %}alert-warning{% endif %}">
+                                    {% if language_code != 'en' %}
+                                    <div class="eligibility-translation" data-scheme-id="{{ scheme.id }}">
+                                        <div class="spinner-border spinner-border-sm text-primary" role="status">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
+                                        Translating...
+                                    </div>
+                                    {% else %}
+                                    {{ scheme.eligibility_details|safe }}
+                                    {% endif %}
+                                </div>
+                                
+                                <button class="btn btn-outline-primary generate-audio-btn" data-scheme-id="{{ scheme.id }}">
+                                    <i class="bi bi-volume-up"></i> Generate Audio
+                                </button>
+                                
+                                <div id="audio-player-{{ scheme.id }}" class="mt-3 d-none">
+                                    <audio controls class="w-100">
+                                        <source src="" type="audio/mp3">
+                                        Your browser does not support the audio element.
+                                    </audio>
+                                    <div class="form-text">Tip: Click the 3-dot menu in the audio player to download the audio file</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(document).ready(function() {
+    {% if language_code != 'en' and schemes|length > 0 %}
+    // Translate summaries and eligibility details
+    $('.summary-translation').each(function() {
+        const element = $(this);
+        const schemeId = element.data('scheme-id');
+        
+        // Make AJAX request to translate
+        $.ajax({
+            url: '/translate_scheme_summary',
+            method: 'GET',
+            data: { scheme_id: schemeId },
+            success: function(data) {
+                element.html(data.translated_text);
+            },
+            error: function() {
+                element.html("Translation failed. Please try again.");
+            }
+        });
+    });
+    
+    $('.eligibility-translation').each(function() {
+        const element = $(this);
+        const schemeId = element.data('scheme-id');
+        
+        // Make AJAX request to translate
+        $.ajax({
+            url: '/translate_eligibility_details',
+            method: 'GET',
+            data: { scheme_id: schemeId },
+            success: function(data) {
+                element.html(data.translated_text);
+            },
+            error: function() {
+                element.html("Translation failed. Please try again.");
+            }
+        });
+    });
+    {% endif %}
+    
+    // Generate audio button click
+    $('.generate-audio-btn').on('click', function() {
+        const schemeId = $(this).data('scheme-id');
+        const audioPlayer = $('#audio-player-' + schemeId);
+        const audioElement = audioPlayer.find('audio');
+        
+        // Show loading
+        $(this).prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Generating...');
+        
+        // Generate audio
+        $.ajax({
+            url: '/generate_scheme_audio',
+            method: 'GET',
+            data: { scheme_id: schemeId },
+            success: function(data) {
+                // Enable button
+                $('.generate-audio-btn[data-scheme-id="' + schemeId + '"]').prop('disabled', false).html('<i class="bi bi-volume-up"></i> Generate Audio');
+                
+                // Update audio source and show player
+                audioElement.attr('src', data.audio_url);
+                audioPlayer.removeClass('d-none');
+                audioElement[0].load();
+                audioElement[0].play();
+            },
+            error: function() {
+                // Enable button
+                $('.generate-audio-btn[data-scheme-id="' + schemeId + '"]').prop('disabled', false).html('<i class="bi bi-volume-up"></i> Generate Audio');
+                
+                alert('Failed to generate audio. Please try again.');
+            }
+        });
+    });
+});
+</script>
+{% endblock %} 

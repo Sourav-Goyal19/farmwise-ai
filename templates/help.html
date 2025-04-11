@@ -1,0 +1,131 @@
+{% extends "layout.html" %}
+
+{% block title %}Help & Instructions{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card scheme-card">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">How to use FarmWise AI</h4>
+                </div>
+                <div class="card-body">
+                    <ol class="list-group list-group-numbered mb-4">
+                        <li class="list-group-item d-flex align-items-start">
+                            <div>
+                                <strong>Upload a scheme document</strong>
+                                <p>Go to the 'Analyze Scheme' tab and upload a PDF file of the government scheme you want to understand.</p>
+                            </div>
+                        </li>
+                        <li class="list-group-item d-flex align-items-start">
+                            <div>
+                                <strong>Read the summary</strong>
+                                <p>The AI will create an easy-to-understand summary of the scheme, explaining benefits and requirements.</p>
+                            </div>
+                        </li>
+                        <li class="list-group-item d-flex align-items-start">
+                            <div>
+                                <strong>Listen to the audio</strong>
+                                <p>If you prefer, you can listen to an audio summary in your chosen language.</p>
+                            </div>
+                        </li>
+                        <li class="list-group-item d-flex align-items-start">
+                            <div>
+                                <strong>Check eligibility</strong>
+                                <p>Answer the questions to see if you qualify for the scheme.</p>
+                            </div>
+                        </li>
+                        <li class="list-group-item d-flex align-items-start">
+                            <div>
+                                <strong>Save schemes</strong>
+                                <p>Save important schemes to your list for future reference.</p>
+                            </div>
+                        </li>
+                        <li class="list-group-item d-flex align-items-start">
+                            <div>
+                                <strong>Change language</strong>
+                                <p>Use the sidebar to select your preferred language.</p>
+                            </div>
+                        </li>
+                    </ol>
+                </div>
+            </div>
+            
+            <div class="card scheme-card mt-4">
+                <div class="card-header bg-success text-white">
+                    <h4 class="mb-0">Frequently Asked Questions</h4>
+                </div>
+                <div class="card-body">
+                    <div class="accordion" id="faqAccordion">
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#faq1">
+                                    Is my personal information secure?
+                                </button>
+                            </h2>
+                            <div id="faq1" class="accordion-collapse collapse show" data-bs-parent="#faqAccordion">
+                                <div class="accordion-body">
+                                    Yes, we only collect your name and phone number to save your scheme preferences.
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq2">
+                                    Can I access my saved schemes from another device?
+                                </button>
+                            </h2>
+                            <div id="faq2" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                                <div class="accordion-body">
+                                    Yes, just log in with the same phone number.
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq3">
+                                    How accurate are the eligibility checks?
+                                </button>
+                            </h2>
+                            <div id="faq3" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                                <div class="accordion-body">
+                                    The eligibility check is based on the information provided in the scheme document and your answers. Always verify with official sources for final confirmation.
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq4">
+                                    Why do I need to log in?
+                                </button>
+                            </h2>
+                            <div id="faq4" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                                <div class="accordion-body">
+                                    Logging in allows you to save schemes and access them later.
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq5">
+                                    Can I upload documents in languages other than English?
+                                </button>
+                            </h2>
+                            <div id="faq5" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                                <div class="accordion-body">
+                                    Currently, we only support English documents for analysis, but summaries can be translated to multiple languages.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

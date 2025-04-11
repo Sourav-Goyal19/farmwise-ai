@@ -92,31 +92,31 @@ if st.session_state.current_language != language_code:
     st.session_state.current_language = language_code
 
 # User login/profile section in sidebar
-st.sidebar.markdown("---")
-st.sidebar.subheader("User Profile")
+# st.sidebar.markdown("---")
+# st.sidebar.subheader("User Profile")
 
 # Simple login form
-if st.session_state.user_id is None:
-    with st.sidebar.form("login_form"):
-        name = st.text_input("Your Name")
-        phone = st.text_input("Phone Number")
-        login_button = st.form_submit_button("Login / Register")
+# if st.session_state.user_id is None:
+#     with st.sidebar.form("login_form"):
+#         name = st.text_input("Your Name")
+#         phone = st.text_input("Phone Number")
+#         login_button = st.form_submit_button("Login / Register")
         
-        if login_button and name and phone:
-            # Validate phone number (basic validation)
-            if re.match(r'^\d{10}$', phone):
-                user_id = db_utils.get_or_create_user(name, phone, language_code)
-                st.session_state.user_id = user_id
-                st.session_state.user_name = name
-                st.rerun()
-            else:
-                st.error("Please enter a valid 10-digit phone number")
-else:
-    st.sidebar.success(f"Logged in as: {st.session_state.user_name}")
-    if st.sidebar.button("Logout"):
-        st.session_state.user_id = None
-        st.session_state.user_name = None
-        st.rerun()
+#         if login_button and name and phone:
+#             # Validate phone number (basic validation)
+#             if re.match(r'^\d{10}$', phone):
+#                 user_id = db_utils.get_or_create_user(name, phone, language_code)
+#                 st.session_state.user_id = user_id
+#                 st.session_state.user_name = name
+#                 st.rerun()
+#             else:
+#                 st.error("Please enter a valid 10-digit phone number")
+# else:
+#     st.sidebar.success(f"Logged in as: {st.session_state.user_name}")
+#     if st.sidebar.button("Logout"):
+#         st.session_state.user_id = None
+#         st.session_state.user_name = None
+#         st.rerun()
 
 # Main app header
 st.title("🌾 FarmWise AI")
@@ -221,6 +221,7 @@ with tab1:
                     # Display audio player
                     if audio_bytes:
                         st.audio(audio_bytes, format="audio/mp3")
+                        
                         st.info("💡 Tip: Click the 3-dot menu in the audio player to download the audio file")
             except Exception as e:
                 st.error(f"Error generating audio: {e}")

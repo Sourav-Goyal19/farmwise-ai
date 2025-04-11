@@ -1,0 +1,100 @@
+{% extends "layout.html" %}
+
+{% block title %}Home{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-12">
+            <div class="card scheme-card">
+                <div class="card-header bg-success text-white">
+                    <h4 class="mb-0">Upload Government Scheme Document</h4>
+                </div>
+                <div class="card-body">
+                    <form id="scheme-upload-form" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <label for="scheme_file" class="form-label">Upload PDF file of the government scheme</label>
+                            <input type="file" class="form-control" id="scheme_file" name="scheme_file" accept=".pdf" required>
+                        </div>
+                        <div class="mb-3">
+                            <button type="submit" class="btn btn-success" id="upload-btn">Upload and Analyze</button>
+                            <div class="spinner-border text-success d-none" id="upload-spinner" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    </form>
+                    <div class="alert alert-danger d-none" id="error-message"></div>
+                </div>
+            </div>
+
+            <div class="card scheme-card mt-4">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">About FarmWise AI</h4>
+                </div>
+                <div class="card-body">
+                    <h5>Helping farmers understand government schemes</h5>
+                    <p>FarmWise AI simplifies complex government agricultural schemes, making them accessible to farmers in their preferred language.</p>
+                    
+                    <h5 class="mt-4">Key Features:</h5>
+                    <ul>
+                        <li><strong>Simple Summaries:</strong> Convert complex policy language into easy-to-understand explanations</li>
+                        <li><strong>Multiple Languages:</strong> Access information in several Indian languages</li>
+                        <li><strong>Audio Summaries:</strong> Listen to summaries if you prefer not to read</li>
+                        <li><strong>Eligibility Check:</strong> Answer simple questions to see if you qualify</li>
+                        <li><strong>Save & Access:</strong> Save schemes that interest you for future reference</li>
+                    </ul>
+                    
+                    <div class="text-center mt-4">
+                        <a href="{{ url_for('help_page') }}" class="btn btn-outline-primary">Learn More</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(document).ready(function() {
+    $('#scheme-upload-form').on('submit', function(e) {
+        e.preventDefault();
+        
+        // Show spinner, hide button and error
+        $('#upload-btn').addClass('d-none');
+        $('#upload-spinner').removeClass('d-none');
+        $('#error-message').addClass('d-none');
+        
+        // Get form data
+        var formData = new FormData(this);
+        
+        // Send AJAX request
+        $.ajax({
+            url: '{{ url_for("upload_scheme") }}',
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function(response) {
+                if (response.success) {
+                    window.location.href = response.redirect;
+                } else {
+                    $('#error-message').text(response.error).removeClass('d-none');
+                    $('#upload-btn').removeClass('d-none');
+                    $('#upload-spinner').addClass('d-none');
+                }
+            },
+            error: function(xhr) {
+                let errorMsg = 'An error occurred during upload.';
+                if (xhr.responseJSON && xhr.responseJSON.error) {
+                    errorMsg = xhr.responseJSON.error;
+                }
+                $('#error-message').text(errorMsg).removeClass('d-none');
+                $('#upload-btn').removeClass('d-none');
+                $('#upload-spinner').addClass('d-none');
+            }
+        });
+    });
+});
+</script>
+{% endblock %} 

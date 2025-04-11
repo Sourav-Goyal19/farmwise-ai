@@ -1,11 +1,15 @@
 import streamlit as st
 from PyPDF2 import PdfReader
-from pinecone.grpc import PineconeGRPC as Pinecone
-from pinecone import ServerlessSpec, Index
+from pinecone import Pinecone, ServerlessSpec
 from langchain_pinecone import PineconeVectorStore
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_cohere import CohereEmbeddings
 import logging
+import os
+from dotenv import load_dotenv
+
+# Load environment variables (optional, hardcoded for now)
+load_dotenv()
 
 # Set up logging
 logging.basicConfig(
@@ -18,12 +22,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Hardcode Pinecone credentials (remove .env dependency for now)
+# Hardcode credentials (remove .env dependency for now)
 PINECONE_API_KEY = "pcsk_4UTPKe_5mkXoweEw83pjDm5gebcCdjRA76kvzZ1fysbaNsnugm2ds7hyHJQ5YFtJ78oMk5"
 PINECONE_HOST = "https://farmwise-ai-zuudimf.svc.aped-4627-b74a.pinecone.io"
 PINECONE_ENVIRONMENT = "us-east-1"
-
-# Hardcode Cohere API key
 COHERE_API_KEY = "fyYH6Yv6trfc81mWAtEjMqU8Uvnl5f77qIQjJT5g"
 
 # Validate required credentials
@@ -32,13 +34,13 @@ if not all([PINECONE_API_KEY, PINECONE_HOST, PINECONE_ENVIRONMENT, COHERE_API_KE
     st.error("Missing required credentials. Please check hardcoded values.")
     st.stop()
 
-# Initialize Pinecone client with gRPC
+# Initialize Pinecone client
 try:
     pc = Pinecone(api_key=PINECONE_API_KEY)
-    logger.info("Successfully initialized Pinecone gRPC client.")
+    logger.info("Successfully initialized Pinecone client.")
 except Exception as e:
-    logger.error(f"Failed to initialize Pinecone gRPC client: {e}")
-    st.error(f"Failed to initialize Pinecone gRPC client: {e}")
+    logger.error(f"Failed to initialize Pinecone client: {e}")
+    st.error(f"Failed to initialize Pinecone client: {e}")
     st.stop()
 
 # Streamlit app configuration
@@ -77,17 +79,22 @@ def init_pinecone_index(index_name, dimension):
                 st.error(f"Index '{index_name}' does not exist. Enable 'Recreate index' or create it manually.")
                 return None
         else:
-            logger.info(f"Connected to existing index '{index_name}'.")
+            # Verify index configuration using available metadata
+            index_info = next((idx for idx in pc.list_indexes() if idx["name"] == index_name), None)
+            if index_info and (index_info.get("dimension", 0) != dimension or index_info.get("metric", "") != "cosine"):
+                logger.error(f"Index '{index_name}' configuration mismatch. Expected: dimension={dimension}, metric=cosine. Got: dimension={index_info.get('dimension', 0)}, metric={index_info.get('metric', '')}")
+                st.error(f"Index '{index_name}' configuration mismatch. Recreate the index with correct settings.")
+                return None
+            logger.info(f"Connected to existing index '{index_name}' with matching configuration.")
             st.info(f"Connected to existing index '{index_name}'.")
-        
-        index = pc.Index(host=PINECONE_HOST)
-        logger.debug(f"Initialized index object type: {type(index)}, value: {index}")
-        
-        if not index.describe_index_stats().get("total_vector_count", 0) >= 0:
-            logger.warning("Index stats check failed. Index may be unhealthy.")
-            st.warning("Index may be unhealthy. Consider recreating it.")
+
+        # Initialize vector store (embedding will be set during storage)
+        vector_store = PineconeVectorStore.from_existing_index(index_name=index_name, embedding=None)
+        if not vector_store:
+            logger.warning("Vector store initialization failed. Index may be unhealthy.")
+            st.warning("Vector store initialization failed. Consider recreating the index.")
             return None
-        return index
+        return vector_store
     except Exception as e:
         logger.error(f"Error initializing Pinecone index: {e}")
         st.error(f"Error initializing Pinecone index: {e}")
@@ -138,13 +145,12 @@ def process_and_store_pdf(pdf_file, index_name):
             logger.error("PDF processing aborted due to document loading failure.")
             return False
 
-        logger.debug(f"Initializing Pinecone index: {index_name}")
-        pinecone_index = init_pinecone_index(index_name, dimension)
-        if not pinecone_index or not isinstance(pinecone_index, Index):
-            logger.error("Invalid Pinecone index instance. Ensure the index is correctly initialized.")
-            st.error("Invalid Pinecone index instance. Ensure the index is correctly initialized.")
+        logger.debug("Initializing Pinecone vector store...")
+        vector_store = init_pinecone_index(index_name, dimension)
+        if not vector_store:
+            logger.error("Failed to initialize Pinecone vector store.")
             return False
-        logger.info("Pinecone index initialized successfully.")
+        logger.info("Pinecone vector store initialized successfully.")
 
         logger.debug("Initializing Cohere embeddings...")
         try:
@@ -157,7 +163,8 @@ def process_and_store_pdf(pdf_file, index_name):
 
         logger.debug("Storing embeddings in Pinecone...")
         try:
-            vectorstore = PineconeVectorStore.from_documents(
+            # Update the vector store with embeddings
+            vector_store = PineconeVectorStore.from_documents(
                 documents=documents,
                 index_name=index_name,
                 embedding=embeddings
@@ -184,8 +191,9 @@ def main():
                 indexes = pc.list_indexes()
                 for idx in indexes:
                     if idx["name"] == "farmwise-ai":
-                        logger.info(f"Updated record count for 'farmwise-ai': {idx.get('record_count', 0)}")
-                        st.write(f"Updated record count for 'farmwise-ai': {idx.get('record_count', 0)}")
+                        # Note: Direct record count is not available via list_indexes; approximate with vector store if needed
+                        logger.info(f"Index '{idx['name']}' updated. (Record count not directly available via list_indexes)")
+                        st.write(f"Index '{idx['name']}' updated. (Record count not directly available via list_indexes)")
             else:
                 st.error("Failed to process PDF. Check the logs for details.")
 
@@ -195,8 +203,8 @@ def main():
         if indexes:
             st.markdown("### Current Pinecone Indexes")
             for idx in indexes:
-                logger.debug(f"Index: {idx['name']}, Dimension: {idx['dimension']}, Metric: {idx['metric']}, Records: {idx.get('record_count', 0)}")
-                st.write(f"- {idx['name']} (Dimension: {idx['dimension']}, Metric: {idx['metric']}, Records: {idx.get('record_count', 0)})")
+                logger.debug(f"Index: {idx['name']}, Dimension: {idx['dimension']}, Metric: {idx['metric']}")
+                st.write(f"- {idx['name']} (Dimension: {idx['dimension']}, Metric: {idx['metric']})")
     except Exception as e:
         logger.warning(f"Could not fetch Pinecone indexes: {e}")
         st.warning(f"Could not fetch Pinecone indexes: {e}")

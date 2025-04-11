@@ -1,6 +1,6 @@
 import streamlit as st
 from dotenv import load_dotenv
-from workflow2 import run_workflow, FarmerState
+from workflow import run_workflow, FarmerState
 
 load_dotenv()   
 

@@ -53,18 +53,21 @@ export default function Chat() {
   const [isRecording, setIsRecording] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [voicesReady, setVoicesReady] = useState(false);
+  const [currentSpeechId, setCurrentSpeechId] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const speechStatusRef = useRef<"idle" | "speaking">("idle");
 
   useEffect(() => {
     const handleVoicesChanged = () => {
-      setVoicesReady(true);
+      const voices = window.speechSynthesis.getVoices();
+      if (voices.length > 0) {
+        console.log("Available voices:", voices);
+      }
     };
 
     window.speechSynthesis.onvoiceschanged = handleVoicesChanged;
-    if (window.speechSynthesis.getVoices().length > 0) {
-      setVoicesReady(true);
-    }
+
+    handleVoicesChanged();
 
     return () => {
       window.speechSynthesis.onvoiceschanged = null;
@@ -76,37 +79,88 @@ export default function Chat() {
   }, [messages]);
 
   const speak = useCallback(
-    (text: string, langCode: string) => {
-      if (!voicesReady) return;
+    (text: string, langCode: string, messageId: number) => {
+      if (speechStatusRef.current === "speaking") {
+        window.speechSynthesis.cancel();
+      }
 
-      window.speechSynthesis.cancel();
+      speechStatusRef.current = "speaking";
+      setCurrentSpeechId(messageId);
+      setIsSpeaking(true);
 
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = langCode;
-      utterance.rate = 1.0;
-      utterance.pitch = 1.0;
-      utterance.volume = 1.0;
+      utterance.rate = 0.9;
+      utterance.pitch = 1;
+      utterance.volume = 1;
 
-      utterance.onstart = () => setIsSpeaking(true);
-      utterance.onend = () => setIsSpeaking(false);
-      utterance.onerror = () => {
-        setIsSpeaking(false);
+      utterance.onstart = () => {
+        console.log("Speech started for message:", messageId);
+        setIsSpeaking(true);
       };
 
+      utterance.onend = () => {
+        console.log("Speech ended");
+        speechStatusRef.current = "idle";
+        setIsSpeaking(false);
+        setCurrentSpeechId(null);
+      };
+
+      utterance.onerror = (event) => {
+        console.error("Speech error:", event);
+        speechStatusRef.current = "idle";
+        setIsSpeaking(false);
+        setCurrentSpeechId(null);
+      };
+
+      // Find the best available voice
       const voices = window.speechSynthesis.getVoices();
       const voice =
-        voices.find((v) => v.lang.startsWith(langCode)) || voices[0];
-      if (voice) utterance.voice = voice;
+        voices.find((v) => v.lang === langCode) ||
+        voices.find((v) => v.lang.startsWith(langCode)) ||
+        voices.find((v) => v.default);
 
-      window.speechSynthesis.speak(utterance);
+      if (voice) {
+        console.log(`Using voice: ${voice.name} (${voice.lang})`);
+        utterance.voice = voice;
+      }
+
+      try {
+        window.speechSynthesis.speak(utterance);
+      } catch (error) {
+        console.error("Speech synthesis failed:", error);
+        speechStatusRef.current = "idle";
+        setIsSpeaking(false);
+        setCurrentSpeechId(null);
+      }
     },
-    [voicesReady]
+    []
   );
 
   const stopSpeech = useCallback(() => {
-    window.speechSynthesis.cancel();
-    setIsSpeaking(false);
+    try {
+      window.speechSynthesis.cancel();
+      speechStatusRef.current = "idle";
+      setIsSpeaking(false);
+      setCurrentSpeechId(null);
+    } catch (error) {
+      console.error("Error stopping speech:", error);
+    }
   }, []);
+
+  const handleSpeechClick = useCallback(
+    (message: Message) => {
+      const isCurrentMessage = currentSpeechId === message.id;
+      const isSpeakingNow = speechStatusRef.current === "speaking";
+
+      if (isSpeakingNow && isCurrentMessage) {
+        stopSpeech();
+      } else {
+        speak(message.content, selectedLanguage.code, message.id);
+      }
+    },
+    [currentSpeechId, selectedLanguage.code, speak, stopSpeech]
+  );
 
   const renderMessageContent = (content: string) => {
     try {
@@ -151,9 +205,12 @@ export default function Chat() {
     setIsLoading(true);
 
     try {
-      const prompt = `You are an agricultural expert specializing in crops, farming challenges, government schemes for farmers, and current market prices for crops. Provide detailed and helpful information to assist farmers. Assist them and talk like a human, with proper punctuation and expression. Format your response using Markdown for clarity, with proper headings, bullet points, and numbered lists where appropriate.
+      const prompt = `You are an agricultural expert. Respond to the following question in ${selectedLanguage.name} (language code: ${selectedLanguage.code}). 
+      Provide detailed and helpful information about crops, farming challenges, government schemes for farmers, and current market prices.
+      Format your response using Markdown for clarity with proper headings, bullet points, and numbered lists where appropriate.
+      Ensure the response is entirely in ${selectedLanguage.name}, including any examples or technical terms.
 
-      User question: ${inputMessage}`;
+      Question: ${inputMessage}`;
 
       const result = await model.generateContent(prompt);
       const response = await result.response;
@@ -171,7 +228,9 @@ export default function Chat() {
       const errorMessage: Message = {
         role: "assistant",
         content:
-          "I apologize, but I encountered an error while processing your request. Please try again.",
+          selectedLanguage.code === "en"
+            ? "I apologize, but I encountered an error while processing your request. Please try again."
+            : "माफ कीजिए, मुझे आपके अनुरोध को संसाधित करते समय एक त्रुटि हुई। कृपया पुनः प्रयास करें।",
         id: Date.now(),
       };
       setMessages((prev) => [...prev, errorMessage]);
@@ -243,7 +302,7 @@ export default function Chat() {
 
   return (
     <div className="flex flex-col h-screen bg-background">
-      <header className="border-b py-3 px-4 flex items-center justify-between bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10 inset-x-0">
+      <header className="border-b py-3 px-4 flex items-center justify-between bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10">
         <div className="flex items-center space-x-3">
           <Sheet>
             <SheetTrigger asChild className="md:hidden">
@@ -313,17 +372,17 @@ export default function Chat() {
                   }`}
                 >
                   <div
-                    className={`rounded-lg px-4 py-1.5 max-w-[90%] md:max-w-[70%] ${
+                    className={`rounded-lg px-4 py-3 max-w-[90%] md:max-w-[70%] ${
                       message.role === "user"
-                        ? "bg-primary text-foreground"
+                        ? "bg-primary text-primary-foreground"
                         : "bg-muted"
                     }`}
                   >
-                    <div className="flex justify-between items-start mb-[2px]">
+                    <div className="flex justify-between items-start mb-1">
                       <span
                         className={`text-xs ${
                           message.role === "user"
-                            ? "text-foreground/70"
+                            ? "text-primary-foreground/70"
                             : "text-muted-foreground"
                         }`}
                       >
@@ -332,7 +391,7 @@ export default function Chat() {
                       <span
                         className={`text-xs ${
                           message.role === "user"
-                            ? "text-foreground/70"
+                            ? "text-primary-foreground/70"
                             : "text-muted-foreground"
                         }`}
                       >
@@ -340,27 +399,33 @@ export default function Chat() {
                       </span>
                     </div>
                     <div
+                      className="prose prose-sm max-w-none"
                       dangerouslySetInnerHTML={renderMessageContent(
                         message.content
                       )}
                     />
                     {message.role === "assistant" && (
                       <Button
-                        variant={isSpeaking ? "destructive" : "secondary"}
-                        size="sm"
-                        onClick={() =>
-                          isSpeaking
-                            ? stopSpeech()
-                            : speak(message.content, selectedLanguage.code)
+                        variant={
+                          currentSpeechId === message.id && isSpeaking
+                            ? "destructive"
+                            : "secondary"
                         }
+                        size="sm"
+                        onClick={() => handleSpeechClick(message)}
                         className="mt-2"
                       >
-                        {isSpeaking ? (
-                          <StopCircle className="w-4 h-4 mr-2" />
+                        {currentSpeechId === message.id && isSpeaking ? (
+                          <>
+                            <StopCircle className="w-4 h-4 mr-2 animate-pulse" />
+                            Stop
+                          </>
                         ) : (
-                          <Volume2 className="w-4 h-4 mr-2" />
+                          <>
+                            <Volume2 className="w-4 h-4 mr-2" />
+                            Read Aloud
+                          </>
                         )}
-                        {isSpeaking ? "Stop" : "Read Aloud"}
                       </Button>
                     )}
                   </div>

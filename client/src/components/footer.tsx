@@ -19,8 +19,8 @@ const FooterSection = () => {
           {/* Company Info */}
           <div>
             <Link to="/" className="flex items-center space-x-2 mb-6">
-              <Sprout className="h-6 w-6 text-farm-green" />
-              <span className="text-xl font-bold text-farm-green-dark">
+              <Sprout className="h-6 w-6 text-green-400" />
+              <span className="text-xl font-bold text-green-400-dark">
                 FarmWise
               </span>
             </Link>
@@ -31,25 +31,25 @@ const FooterSection = () => {
             <div className="flex space-x-4">
               <a
                 href="#"
-                className="text-gray-400 hover:text-farm-green transition-colors"
+                className="text-gray-400 hover:text-green-400 transition-colors"
               >
                 <Facebook className="h-5 w-5" />
               </a>
               <a
                 href="#"
-                className="text-gray-400 hover:text-farm-green transition-colors"
+                className="text-gray-400 hover:text-green-400 transition-colors"
               >
                 <Twitter className="h-5 w-5" />
               </a>
               <a
                 href="#"
-                className="text-gray-400 hover:text-farm-green transition-colors"
+                className="text-gray-400 hover:text-green-400 transition-colors"
               >
                 <Instagram className="h-5 w-5" />
               </a>
               <a
                 href="#"
-                className="text-gray-400 hover:text-farm-green transition-colors"
+                className="text-gray-400 hover:text-green-400 transition-colors"
               >
                 <Linkedin className="h-5 w-5" />
               </a>
@@ -65,7 +65,7 @@ const FooterSection = () => {
               <li>
                 <Link
                   to="/"
-                  className="text-gray-600 hover:text-farm-green transition-colors"
+                  className="text-gray-600 hover:text-green-400 transition-colors"
                 >
                   Home
                 </Link>
@@ -73,7 +73,7 @@ const FooterSection = () => {
               <li>
                 <Link
                   to="#features"
-                  className="text-gray-600 hover:text-farm-green transition-colors"
+                  className="text-gray-600 hover:text-green-400 transition-colors"
                 >
                   Features
                 </Link>
@@ -81,7 +81,7 @@ const FooterSection = () => {
               <li>
                 <Link
                   to="#about"
-                  className="text-gray-600 hover:text-farm-green transition-colors"
+                  className="text-gray-600 hover:text-green-400 transition-colors"
                 >
                   About Us
                 </Link>
@@ -89,7 +89,7 @@ const FooterSection = () => {
               <li>
                 <Link
                   to="/subsidy"
-                  className="text-gray-600 hover:text-farm-green transition-colors"
+                  className="text-gray-600 hover:text-green-400 transition-colors"
                 >
                   Apply for Subsidy
                 </Link>
@@ -97,7 +97,7 @@ const FooterSection = () => {
               <li>
                 <Link
                   to="/chat"
-                  className="text-gray-600 hover:text-farm-green transition-colors"
+                  className="text-gray-600 hover:text-green-400 transition-colors"
                 >
                   Expert Chat
                 </Link>
@@ -112,18 +112,18 @@ const FooterSection = () => {
             </h3>
             <ul className="space-y-4">
               <li className="flex items-start">
-                <MapPin className="h-5 w-5 text-farm-green mr-3 mt-0.5" />
+                <MapPin className="h-5 w-5 text-green-400 mr-3 mt-0.5" />
                 <span className="text-gray-600">
                   123 Farm Lane, <br />
                   Agriville, CA 94107
                 </span>
               </li>
               <li className="flex items-center">
-                <Phone className="h-5 w-5 text-farm-green mr-3" />
+                <Phone className="h-5 w-5 text-green-400 mr-3" />
                 <span className="text-gray-600">(123) 456-7890</span>
               </li>
               <li className="flex items-center">
-                <Mail className="h-5 w-5 text-farm-green mr-3" />
+                <Mail className="h-5 w-5 text-green-400 mr-3" />
                 <span className="text-gray-600">info@farmwise.com</span>
               </li>
             </ul>
@@ -146,7 +146,7 @@ const FooterSection = () => {
               />
               <button
                 type="submit"
-                className="w-full bg-farm-green text-white py-2 px-4 rounded-md hover:bg-farm-green-dark transition-colors"
+                className="w-full bg-primary text-white py-2 px-4 rounded-md hover:bg-primary-dark transition-colors"
               >
                 Subscribe
               </button>

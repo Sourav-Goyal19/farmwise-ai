@@ -396,7 +396,7 @@ export default function Chat() {
                   <div
                     className={`rounded-lg px-4 py-3 max-w-[90%] md:max-w-[70%] ${
                       message.role === "user"
-                        ? "bg-primary text-primary-foreground"
+                        ? "bg-primary text-foreground"
                         : "bg-muted"
                     }`}
                   >
@@ -404,7 +404,7 @@ export default function Chat() {
                       <span
                         className={`text-xs ${
                           message.role === "user"
-                            ? "text-primary-foreground/70"
+                            ? "text-foreground/70"
                             : "text-muted-foreground"
                         }`}
                       >
@@ -413,7 +413,7 @@ export default function Chat() {
                       <span
                         className={`text-xs ${
                           message.role === "user"
-                            ? "text-primary-foreground/70"
+                            ? "text-foreground/70"
                             : "text-muted-foreground"
                         }`}
                       >

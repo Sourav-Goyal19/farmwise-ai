@@ -17,12 +17,12 @@ const AboutSection = () => {
           {/* Image side */}
           <div className="lg:w-1/2 animate-fade-in-up">
             <div className="relative">
-              <div className="absolute -top-4 -left-4 w-20 h-20 bg-farm-green rounded-full opacity-20"></div>
+              <div className="absolute -top-4 -left-4 w-20 h-20 bg-primary rounded-full opacity-20"></div>
               <div className="absolute -bottom-6 -right-6 w-28 h-28 bg-farm-yellow rounded-full opacity-20"></div>
 
               <div className="relative rounded-2xl overflow-hidden shadow-xl">
                 <img
-                  src="https://images.unsplash.com/photo-1592982537447-7440770faae9?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1074&q=80"
+                  src="https://eos.com/wp-content/uploads/2020/02/checking-plant-using-technologies.jpg.webp"
                   alt="Farmers using technology"
                   className="w-full h-[400px] object-cover"
                 />
@@ -35,14 +35,14 @@ const AboutSection = () => {
             className="lg:w-1/2 space-y-6 animate-fade-in-up"
             style={{ animationDelay: "0.2s" }}
           >
-            <div className="inline-flex items-center px-3 py-1 rounded-full bg-farm-green-light text-farm-green font-medium text-sm">
+            <div className="inline-flex items-center px-3 py-1 rounded-full bg-primary-light text-green-400 font-medium text-sm">
               <Leaf className="h-4 w-4 mr-2" />
               <span>Our Mission</span>
             </div>
 
             <h2 className="text-3xl md:text-4xl font-bold text-gray-800 leading-tight">
               Empowering Farmers with{" "}
-              <span className="text-farm-green">Technology</span>
+              <span className="text-green-400">Technology</span>
             </h2>
 
             <p className="text-gray-600">
@@ -56,7 +56,7 @@ const AboutSection = () => {
             <div className="space-y-3 mt-6">
               {benefits.map((benefit, index) => (
                 <div key={index} className="flex items-start">
-                  <CheckCircle className="h-5 w-5 text-farm-green shrink-0 mt-0.5" />
+                  <CheckCircle className="h-5 w-5 text-green-400 shrink-0 mt-0.5" />
                   <span className="ml-3 text-gray-600">{benefit}</span>
                 </div>
               ))}

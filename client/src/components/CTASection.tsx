@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 
 const CTASection = () => {
   return (
-    <section id="contact" className="py-20 bg-farm-green text-white">
+    <section id="contact" className="py-20 bg-primary text-white">
       <div className="container mx-auto px-4">
         <div className="flex flex-col md:flex-row items-center justify-between gap-8">
           <div className="md:w-2/3 space-y-4">
@@ -22,7 +22,7 @@ const CTASection = () => {
             <Link to="/subsidy">
               <Button
                 size="lg"
-                className="w-full bg-white text-farm-green hover:bg-gray-100"
+                className="w-full bg-white text-green-400 hover:bg-gray-100"
               >
                 Apply for Subsidy
                 <ArrowRight className="ml-2 h-4 w-4" />

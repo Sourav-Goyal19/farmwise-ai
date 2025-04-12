@@ -53,7 +53,7 @@ const TestimonialsSection = () => {
               style={{ animationDelay: `${testimonial.id * 0.1}s` }}
             >
               {/* Quotation mark */}
-              <div className="absolute -top-4 -left-4 bg-farm-green text-white w-8 h-8 flex items-center justify-center rounded-full text-xl font-bold">
+              <div className="absolute -top-4 -left-4 bg-primary text-white w-8 h-8 flex items-center justify-center rounded-full text-xl font-bold">
                 "
               </div>
 

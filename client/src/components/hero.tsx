@@ -16,14 +16,14 @@ const HeroSection = () => {
         <div className="flex flex-col lg:flex-row items-center gap-12">
           {/* Hero Content */}
           <div className="lg:w-1/2 space-y-6 animate-fade-in-up">
-            <div className="inline-flex items-center px-3 py-1 rounded-full bg-farm-green-light text-farm-green font-medium text-sm">
+            <div className="inline-flex items-center px-3 py-1 rounded-full bg-primary-light text-green-400 font-medium text-sm">
               <Leaf className="h-4 w-4 mr-2" />
               <span>Sustainable Farming Solutions</span>
             </div>
 
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-gray-800 leading-tight">
               Grow your farm with{" "}
-              <span className="text-farm-green">FarmWise</span> Solutions
+              <span className="text-green-400">FarmWise</span> Solutions
             </h1>
 
             <p className="text-lg text-gray-600 max-w-lg">
@@ -35,7 +35,7 @@ const HeroSection = () => {
               <Link to="/subsidy">
                 <Button
                   size="lg"
-                  className="bg-farm-green hover:bg-farm-green-dark text-white"
+                  className="bg-primary hover:bg-primary-dark text-white"
                 >
                   Apply for Subsidy
                   <ArrowRight className="ml-2 h-4 w-4" />
@@ -45,7 +45,7 @@ const HeroSection = () => {
                 <Button
                   size="lg"
                   variant="outline"
-                  className="border-farm-green text-farm-green hover:bg-farm-green-light"
+                  className="border-farm-green text-green-400 hover:bg-primary-light"
                 >
                   Chat with Expert
                 </Button>
@@ -55,15 +55,15 @@ const HeroSection = () => {
             {/* Stats */}
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4 pt-8 border-t border-gray-100 mt-8">
               <div className="text-center">
-                <p className="text-3xl font-bold text-farm-green">1000+</p>
+                <p className="text-3xl font-bold text-green-400">1000+</p>
                 <p className="text-gray-600 text-sm">Farmers Helped</p>
               </div>
               <div className="text-center">
-                <p className="text-3xl font-bold text-farm-green">90%</p>
+                <p className="text-3xl font-bold text-green-400">90%</p>
                 <p className="text-gray-600 text-sm">Success Rate</p>
               </div>
               <div className="text-center md:block hidden">
-                <p className="text-3xl font-bold text-farm-green">24/7</p>
+                <p className="text-3xl font-bold text-green-400">24/7</p>
                 <p className="text-gray-600 text-sm">Expert Support</p>
               </div>
             </div>
@@ -77,7 +77,7 @@ const HeroSection = () => {
             <div className="relative">
               <div className="absolute -top-6 -left-6 w-24 h-24 bg-farm-yellow rounded-full opacity-20 animate-float"></div>
               <div
-                className="absolute -bottom-8 -right-8 w-32 h-32 bg-farm-green rounded-full opacity-20 animate-float"
+                className="absolute -bottom-8 -right-8 w-32 h-32 bg-primary rounded-full opacity-20 animate-float"
                 style={{ animationDelay: "1s" }}
               ></div>
 
@@ -91,8 +91,8 @@ const HeroSection = () => {
                 {/* Floating card */}
                 <div className="absolute -bottom-5 -right-5 bg-white p-4 rounded-lg shadow-lg border border-gray-100 max-w-[200px]">
                   <div className="flex items-center space-x-2">
-                    <div className="bg-farm-green-light p-2 rounded-full">
-                      <Tractor className="h-5 w-5 text-farm-green" />
+                    <div className="bg-primary-light p-2 rounded-full">
+                      <Tractor className="h-5 w-5 text-green-400" />
                     </div>
                     <div>
                       <p className="text-xs font-medium text-gray-800">

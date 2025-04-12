@@ -133,7 +133,7 @@ export function AgriculturalSubsidyForm() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <span className="bg-primary text-primary-foreground w-6 h-6 rounded-full flex items-center justify-center text-sm">
+                <span className="bg-primary text-foreground w-6 h-6 rounded-full flex items-center justify-center text-sm">
                   1
                 </span>
                 Enter Your Farm Details

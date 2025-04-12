@@ -29,18 +29,19 @@ interface Language {
   name: string;
   code: string;
   nativeName?: string;
+  voiceLang?: string;
 }
 
 const languages: Language[] = [
-  { name: "English", code: "en", nativeName: "English" },
-  { name: "Hindi", code: "hi", nativeName: "हिन्दी" },
-  { name: "Tamil", code: "ta", nativeName: "தமிழ்" },
-  { name: "Telugu", code: "te", nativeName: "తెలుగు" },
-  { name: "Bengali", code: "bn", nativeName: "বাংলা" },
-  { name: "Marathi", code: "mr", nativeName: "मराठी" },
-  { name: "Gujarati", code: "gu", nativeName: "ગુજરાતી" },
-  { name: "Kannada", code: "kn", nativeName: "ಕನ್ನಡ" },
-  { name: "Malayalam", code: "ml", nativeName: "മലയാളം" },
+  { name: "English", code: "en", nativeName: "English", voiceLang: "en-US" },
+  { name: "Hindi", code: "hi", nativeName: "हिन्दी", voiceLang: "hi-IN" },
+  { name: "Tamil", code: "ta", nativeName: "தமிழ்", voiceLang: "ta-IN" },
+  { name: "Telugu", code: "te", nativeName: "తెలుగు", voiceLang: "te-IN" },
+  { name: "Bengali", code: "bn", nativeName: "বাংলা", voiceLang: "bn-IN" },
+  { name: "Marathi", code: "mr", nativeName: "मराठी", voiceLang: "mr-IN" },
+  { name: "Gujarati", code: "gu", nativeName: "ગુજરાતી", voiceLang: "gu-IN" },
+  { name: "Kannada", code: "kn", nativeName: "ಕನ್ನಡ", voiceLang: "kn-IN" },
+  { name: "Malayalam", code: "ml", nativeName: "മലയാളം", voiceLang: "ml-IN" },
 ];
 
 const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GOOGLE_API_KEY);
@@ -54,20 +55,26 @@ export default function Chat() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [currentSpeechId, setCurrentSpeechId] = useState<number | null>(null);
+  const [availableVoices, setAvailableVoices] = useState<
+    SpeechSynthesisVoice[]
+  >([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const speechStatusRef = useRef<"idle" | "speaking">("idle");
 
   useEffect(() => {
-    const handleVoicesChanged = () => {
+    const loadVoices = () => {
       const voices = window.speechSynthesis.getVoices();
+      setAvailableVoices(voices);
       if (voices.length > 0) {
-        console.log("Available voices:", voices);
+        console.log(
+          "Available voices:",
+          voices.map((v) => `${v.name} (${v.lang})`)
+        );
       }
     };
 
-    window.speechSynthesis.onvoiceschanged = handleVoicesChanged;
-
-    handleVoicesChanged();
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
 
     return () => {
       window.speechSynthesis.onvoiceschanged = null;
@@ -89,13 +96,20 @@ export default function Chat() {
       setIsSpeaking(true);
 
       const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = langCode;
-      utterance.rate = 0.9;
+      const voiceLang =
+        languages.find((l) => l.code === langCode)?.voiceLang || "en-US";
+      utterance.lang = voiceLang;
+      utterance.rate = langCode === "hi" ? 0.8 : 0.9;
       utterance.pitch = 1;
       utterance.volume = 1;
 
       utterance.onstart = () => {
-        console.log("Speech started for message:", messageId);
+        console.log(
+          "Speech started for message:",
+          messageId,
+          "Language:",
+          voiceLang
+        );
         setIsSpeaking(true);
       };
 
@@ -113,16 +127,24 @@ export default function Chat() {
         setCurrentSpeechId(null);
       };
 
-      // Find the best available voice
-      const voices = window.speechSynthesis.getVoices();
       const voice =
-        voices.find((v) => v.lang === langCode) ||
-        voices.find((v) => v.lang.startsWith(langCode)) ||
-        voices.find((v) => v.default);
+        availableVoices.find(
+          (v) =>
+            v.lang.toLowerCase() === voiceLang.toLowerCase() ||
+            v.lang
+              .toLowerCase()
+              .startsWith(voiceLang.split("-")[0].toLowerCase())
+        ) ||
+        availableVoices.find((v) => v.lang.toLowerCase().includes("en")) ||
+        availableVoices[0];
 
       if (voice) {
-        console.log(`Using voice: ${voice.name} (${voice.lang})`);
+        console.log(
+          `Using voice: ${voice.name} (${voice.lang}) for ${voiceLang}`
+        );
         utterance.voice = voice;
+      } else {
+        console.warn(`No suitable voice found for ${voiceLang}, using default`);
       }
 
       try {
@@ -134,7 +156,7 @@ export default function Chat() {
         setCurrentSpeechId(null);
       }
     },
-    []
+    [availableVoices]
   );
 
   const stopSpeech = useCallback(() => {
@@ -414,6 +436,13 @@ export default function Chat() {
                         size="sm"
                         onClick={() => handleSpeechClick(message)}
                         className="mt-2"
+                        disabled={
+                          !availableVoices.some((v) =>
+                            v.lang
+                              .toLowerCase()
+                              .includes(selectedLanguage.code.toLowerCase())
+                          )
+                        }
                       >
                         {currentSpeechId === message.id && isSpeaking ? (
                           <>

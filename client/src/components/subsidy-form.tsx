@@ -49,7 +49,7 @@ type FormValues = z.infer<typeof formSchema>;
 
 export function AgriculturalSubsidyForm() {
   const [isLoading, setIsLoading] = useState(false);
-  const [recommendations, setRecommendations] = useState<any>(null);
+  const [recommendations, setRecommendations] = useState(null);
   const [visuals, setVisuals] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState("form");
 
@@ -586,7 +586,7 @@ export function AgriculturalSubsidyForm() {
                   <CardContent>
                     <MDEditor.Markdown
                       source={recommendations.recommendations}
-                      style={{ background: "transparent" }}
+                      style={{ background: "transparent", color: "black" }}
                     />
                   </CardContent>
                 </Card>

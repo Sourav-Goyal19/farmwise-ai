@@ -55,6 +55,8 @@ languages = {k: v for k, v in languages.items() if audio_utils.is_language_suppo
 def set_language():
     data = request.get_json()
     language = data.get('language', 'en') if data else 'en'
+    if language not in languages.values():
+        return jsonify({'error': f'Unsupported language code: {language}'}), 400
     session['language'] = language
     return jsonify({'success': True, 'language': language}), 200
 
@@ -67,6 +69,11 @@ def upload_scheme():
     file = request.files['scheme_file']
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
+    
+    # Get language from form data
+    language_code = request.form.get('language', 'en')
+    if language_code not in languages.values():
+        return jsonify({'error': f'Unsupported language code: {language_code}'}), 400
     
     if file and file.filename.endswith('.pdf'):
         try:
@@ -114,18 +121,11 @@ def upload_scheme():
             eligibility_response = eligibility_chain.invoke({})
             eligibility_questions = eligibility_response.content if hasattr(eligibility_response, "content") else eligibility_response
             
-            # Store in session
-            session['document_text'] = text
-            session['scheme_title'] = scheme_title
-            session['scheme_summary'] = summary
-            session['scheme_eligibility'] = eligibility_questions
-            session['original_questions'] = [q.strip() for q in eligibility_questions.strip().split("\n") if q.strip()]
-            
-            # Get selected language
-            language_code = session.get('language', 'en')
+            # Get selected language name
             selected_language = [k for k, v in languages.items() if v == language_code][0]
             
             # Translate summary if not English
+            display_summary = summary
             if language_code != "en":
                 translation_prompt = ChatPromptTemplate.from_messages([
                     ("system", f"You are a translator. Translate the following text from English to {selected_language} maintaining the meaning and simplicity. Return ONLY the translated text without any additional explanations or notes."),
@@ -134,17 +134,63 @@ def upload_scheme():
                 translation_chain = translation_prompt | llm
                 translation_response = translation_chain.invoke({})
                 display_summary = translation_response.content if hasattr(translation_response, "content") else translation_response
-            else:
-                display_summary = summary
+            
+            # Translate eligibility questions if not English
+            display_eligibility_questions = eligibility_questions
+            if language_code != "en":
+                translation_prompt = ChatPromptTemplate.from_messages([
+                    ("system", f"You are a translator. Translate the following questions from English to {selected_language} maintaining the meaning and simplicity. Keep the format with one question per line, no numbering or extra text."),
+                    ("human", eligibility_questions)
+                ])
+                translation_chain = translation_prompt | llm
+                translation_response = translation_chain.invoke({})
+                display_eligibility_questions = translation_response.content if hasattr(translation_response, "content") else translation_response
+            
+            # Generate audio for the summary
+            try:
+                tts_text = display_summary  # Use translated summary for non-English
+                audio_bytes, _ = audio_utils.generate_audio(tts_text, language_code)
+                if not audio_bytes:
+                    return jsonify({'error': 'Failed to generate audio'}), 500
+                
+                # Convert audio to base64 for response
+                audio_bytes.seek(0)
+                audio_base64 = base64.b64encode(audio_bytes.read()).decode('utf-8')
+                
+                # Optionally save audio to temp file for future use
+                timestamp = int(time.time())
+                filename = f"scheme_{scheme_title.lower().replace(' ', '_')}_{timestamp}.mp3"
+                temp_dir = os.path.join(os.getcwd(), 'static', 'temp_audio')
+                os.makedirs(temp_dir, exist_ok=True)
+                temp_file = os.path.join(temp_dir, filename)
+                audio_bytes.seek(0)
+                with open(temp_file, 'wb') as f:
+                    f.write(audio_bytes.read())
+                audio_url = url_for('static', filename=f'temp_audio/{filename}', _external=True)
+            except Exception as e:
+                return jsonify({'error': f'Error generating audio: {e}'}), 500
+            
+            # Store in session
+            session['document_text'] = text
+            session['scheme_title'] = scheme_title
+            session['scheme_summary'] = summary  # Original English
+            session['scheme_summary_translated'] = display_summary  # Translated
+            session['scheme_eligibility'] = eligibility_questions  # Original English
+            session['scheme_eligibility_translated'] = display_eligibility_questions  # Translated
+            session['original_questions'] = [q.strip() for q in eligibility_questions.strip().split("\n") if q.strip()]
+            session['translated_questions'] = [q.strip() for q in display_eligibility_questions.strip().split("\n") if q.strip()]
+            session['language'] = language_code  # For other endpoints
             
             return jsonify({
                 'success': True,
                 'summary': display_summary,
                 'raw': text,
-                'summary title':scheme_title,
-                'eligibility_questions': eligibility_questions,
+                'summary_title': scheme_title,
+                'eligibility_questions': display_eligibility_questions,  # Translated
                 'language': selected_language,
-                'language_code': language_code
+                'language_code': language_code,
+                'audio_base64': audio_base64,
+                'audio_url': audio_url
             })
         
         except Exception as e:
@@ -199,6 +245,7 @@ def view_scheme(scheme_id):
         'scheme_id': scheme_id
     })
 
+
 @app.route('/generate_audio', methods=['POST'])
 def generate_audio():
     # Get JSON data from the request
@@ -241,58 +288,68 @@ def generate_audio():
             return jsonify({'error': 'Failed to generate audio'}), 500
     except Exception as e:
         return jsonify({'error': f'Error generating audio: {e}'}), 500
+
+
 @app.route('/check_eligibility', methods=['POST'])
 def check_eligibility():
-    if 'document_text' not in session or 'original_questions' not in session:
-        return jsonify({'error': 'No scheme data available'}), 400
-    
-    text = session['document_text']
-    original_questions = session['original_questions']
-    
-    # Get responses from form
-    responses = {}
-    for i, _ in enumerate(original_questions):
-        responses[f'q{i}'] = request.form.get(f'q{i}', 'No')
-    
-    # Prepare responses for analysis
-    formatted_responses = "\n".join([f"Q: {original_questions[i]}\nA: {responses[f'q{i}']}" for i in range(len(original_questions))])
-    
-    # Check eligibility
-    eligibility_check_prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are an expert in government agricultural schemes. Based on the scheme document and the farmer's responses to eligibility questions, determine if they are eligible for the scheme. IMPORTANT: Start your response with exactly 'ELIGIBLE: ' (if they qualify) or 'NOT ELIGIBLE: ' (if they don't qualify) followed by a clear explanation of your decision and any next steps they should take. If they are eligible, provide information on how to apply."),
-        ("human", f"Scheme document: {text[:5000]}\n\nFarmer's responses:\n{formatted_responses}\n\nBased on these responses, is the farmer eligible for this scheme? Start with ELIGIBLE: or NOT ELIGIBLE: followed by your explanation.")
-    ])
-    
-    eligibility_check_chain = eligibility_check_prompt | llm
-    eligibility_check_response = eligibility_check_chain.invoke({})
-    eligibility_result = eligibility_check_response.content if hasattr(eligibility_check_response, "content") else eligibility_check_response
-    
-    # Store eligibility result in session
-    session['eligibility_result'] = eligibility_result
-    
-    # Determine if eligible from the response
-    is_eligible = eligibility_result.upper().startswith("ELIGIBLE:") and not eligibility_result.upper().startswith("NOT ELIGIBLE:")
-    
-    # Translate eligibility result if not in English
-    language_code = session.get('language', 'en')
-    if language_code != "en":
-        selected_language = [k for k, v in languages.items() if v == language_code][0]
-        translation_prompt = ChatPromptTemplate.from_messages([
-            ("system", f"You are a translator. Translate the following text from English to {selected_language} maintaining the meaning and simplicity. Return ONLY the translated text without any additional explanations or notes."),
-            ("human", eligibility_result)
+    # Get JSON data from the request
+    data = request.get_json()
+    if not data or 'questions' not in data or 'responses' not in data:
+        return jsonify({'error': 'Questions and responses must be provided'}), 400
+
+    questions = data['questions']
+    responses = data['responses']
+    language_code = data.get('language', 'en')
+
+    # Validate inputs
+    if not isinstance(questions, list) or not isinstance(responses, list):
+        return jsonify({'error': 'Questions and responses must be arrays'}), 400
+    if len(questions) != len(responses):
+        return jsonify({'error': 'Number of questions and responses must match'}), 400
+    if not all(r in ['Yes', 'No'] for r in responses):
+        return jsonify({'error': 'Responses must be "Yes" or "No"'}), 400
+    if language_code not in languages.values():
+        return jsonify({'error': f'Unsupported language code: {language_code}'}), 400
+
+    try:
+        # Prepare responses for analysis
+        formatted_responses = "\n".join(
+            [f"Q: {questions[i]}\nA: {responses[i]}" for i in range(len(questions))]
+        )
+
+        # Check eligibility (no document_text, using questions as context)
+        eligibility_check_prompt = ChatPromptTemplate.from_messages([
+            ("system", "You are an expert in government agricultural schemes. Based on the eligibility questions and the farmer's responses, determine if they are eligible for the scheme. IMPORTANT: Start your response with exactly 'ELIGIBLE: ' (if they qualify) or 'NOT ELIGIBLE: ' (if they don't qualify) followed by a clear explanation of your decision and any next steps they should take. If they are eligible, provide information on how to apply."),
+            ("human", f"Eligibility questions and responses:\n{formatted_responses}\n\nBased on these responses, is the farmer eligible for the scheme? Start with ELIGIBLE: or NOT ELIGIBLE: followed by your explanation.")
         ])
-        translation_chain = translation_prompt | llm
-        translation_response = translation_chain.invoke({})
-        translated_eligibility = translation_response.content if hasattr(translation_response, "content") else translation_response
-        display_result = translated_eligibility
-    else:
+
+        eligibility_check_chain = eligibility_check_prompt | llm
+        eligibility_check_response = eligibility_check_chain.invoke({})
+        eligibility_result = eligibility_check_response.content if hasattr(eligibility_check_response, "content") else eligibility_check_response
+
+        # Determine if eligible
+        is_eligible = eligibility_result.upper().startswith("ELIGIBLE:") and not eligibility_result.upper().startswith("NOT ELIGIBLE:")
+
+        # Translate eligibility result if not in English
         display_result = eligibility_result
-    
-    return jsonify({
-        'success': True,
-        'is_eligible': is_eligible,
-        'result': display_result
-    })
+        if language_code != "en":
+            selected_language = [k for k, v in languages.items() if v == language_code][0]
+            translation_prompt = ChatPromptTemplate.from_messages([
+                ("system", f"You are a translator. Translate the following text from English to {selected_language} maintaining the meaning and simplicity. Return ONLY the translated text without any additional explanations or notes."),
+                ("human", eligibility_result)
+            ])
+            translation_chain = translation_prompt | llm
+            translation_response = translation_chain.invoke({})
+            display_result = translation_response.content if hasattr(translation_response, "content") else translation_response
+
+        return jsonify({
+            'success': True,
+            'is_eligible': is_eligible,
+            'result': display_result
+        })
+    except Exception as e:
+        return jsonify({'error': f'Error checking eligibility: {str(e)}'}), 500
+
 
 @app.route('/save_scheme', methods=['POST'])
 def save_scheme():
@@ -300,17 +357,13 @@ def save_scheme():
         return jsonify({'error': 'Please log in to save this scheme'}), 401
     
     if ('scheme_title' not in session or 'scheme_summary' not in session or 
-        'scheme_eligibility' not in session or 'eligibility_result' not in session):
+        'scheme_eligibility' not in session):
         return jsonify({'error': 'No scheme data available to save'}), 400
     
     scheme_title = session['scheme_title']
-    scheme_summary = session['scheme_summary']
+    scheme_summary = session['scheme_summary']  # Original English
     eligibility_questions = session['scheme_eligibility']
-    eligibility_result = session['eligibility_result']
     document_text = session.get('document_text', '')
-    
-    # Determine if eligible from the response
-    is_eligible = eligibility_result.upper().startswith("ELIGIBLE:") and not eligibility_result.upper().startswith("NOT ELIGIBLE:")
     
     try:
         # Save to database
@@ -322,17 +375,19 @@ def save_scheme():
             document_text=document_text
         )
         
+        # Save user scheme without eligibility result if not checked
         db_utils.save_user_scheme(
             user_id=session['user_id'],
             scheme_id=scheme_id,
-            is_eligible=is_eligible,
-            eligibility_details=eligibility_result
+            is_eligible=None,
+            eligibility_details=None
         )
         
         return jsonify({'success': True, 'message': 'Scheme saved to your list!'})
     
     except Exception as e:
         return jsonify({'error': f'Error saving scheme: {e}'}), 500
+
 
 @app.route('/translate_scheme_summary')
 def translate_scheme_summary():
@@ -374,6 +429,7 @@ def translate_scheme_summary():
         return jsonify({'translated_text': translated_text})
     except Exception as e:
         return jsonify({'error': f'Error translating text: {e}'}), 500
+
 
 @app.route('/translate_eligibility_details')
 def translate_eligibility_details():
@@ -418,6 +474,7 @@ def translate_eligibility_details():
         return jsonify({'translated_text': translated_text})
     except Exception as e:
         return jsonify({'error': f'Error translating text: {e}'}), 500
+
 
 @app.route('/generate_scheme_audio')
 def generate_scheme_audio():
@@ -479,5 +536,6 @@ def generate_scheme_audio():
     except Exception as e:
         return jsonify({'error': f'Error generating audio: {e}'}), 500
 
+
 if __name__ == '__main__':
-    app.run(host = '0.0.0.0', port=5000, debug=True) 
+    app.run(host='0.0.0.0', port=8000, debug=True)

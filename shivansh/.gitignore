@@ -1,2 +1,8 @@
 .venv
 .env
+audio_cache
+static
+./static
+./audio_cache
+/static
+/audio_cache

@@ -60,7 +60,7 @@ We bridge this gap with an AI-first, farmer-friendly platform that:
 - **Voice/Chatbot Interface** (e.g., Whisper, Google Text-to-Speech, or Dialogflow)
 - **MongoDB** or **PostgreSQL** for storing farmer profiles
 - **Pinecone** or **FAISS** for vector similarity search
-- **Cloud Hosting:** Vercel / AWS / GCP
+<!-- - **Cloud Hosting:** Vercel / AWS / GCP -->
 
 ### Installation
 

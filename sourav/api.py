@@ -7,7 +7,7 @@ import logging
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, origins=["http://localhost:5173","http://localhost:5174"])
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

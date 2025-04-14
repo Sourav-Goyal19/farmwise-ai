@@ -586,7 +586,7 @@ export function AgriculturalSubsidyForm() {
                   <CardContent>
                     <MDEditor.Markdown
                       source={recommendations.recommendations}
-                      style={{ background: "transparent" }}
+                      style={{ background: "transparent", color: "black" }}
                     />
                   </CardContent>
                 </Card>

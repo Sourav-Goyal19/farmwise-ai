@@ -68,6 +68,6 @@ We bridge this gap with an AI-first, farmer-friendly platform that:
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-username/agri-advisor.git
-   cd agri-advisor
+   git clone https://github.com/Sourav-Goyal19/farmwise-ai.git
+   cd farmwise-ai
    ```

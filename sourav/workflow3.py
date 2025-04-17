@@ -9,6 +9,8 @@ from langchain_core.documents import Document
 from typing import TypedDict, Optional, Dict, Any, List
 from langchain import hub
 from langchain.agents import create_react_agent, AgentExecutor
+from tools import pinecone_content
+from tavily import TavilyClient
 from langchain.tools import tool
 
 load_dotenv()
@@ -32,6 +34,17 @@ pc = PineconeVectorStore.from_existing_index(
 )
 
 llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", api_key=google_api_key)
+tavily = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
+
+@tool
+def tavily_search(query: str):
+    """Searches online for the given query and summarizes them."""
+    try:
+        search_results = tavily.search(query=query)
+        return search_results
+    except Exception as e:
+        logging.error("Exception caused in tavily search", e);
+        return {}
 
 class FarmerState(TypedDict):
     profile: Dict[str, str]
@@ -39,34 +52,12 @@ class FarmerState(TypedDict):
     recommendations: Optional[str]
     visuals: Optional[List[str]]
 
-# Define tool for the ReAct agent
-@tool
-def pinecone_search(query: str) -> List[Document]:
-    """Search for agricultural schemes in the Pinecone index based on a query."""
-    logger.info("[Pinecone Search Tool] Searching with query: %s", query)
-    try:
-        results = pc.similarity_search_with_score(query=query, k=5)
-        return [
-            Document(
-                page_content=result[0].page_content,
-                metadata={
-                    "url": result[0].metadata.get("url", "unknown"),
-                    "source": "pinecone",
-                    "title": result[0].metadata.get("title", "Untitled")
-                }
-            )
-            for result in results if result[1] > 0.2
-        ]
-    except Exception as e:
-        logger.error("[Pinecone Search Tool] Search failed: %s", str(e))
-        return []
+tools = [pinecone_content]
+tools2 = [tavily_search]
 
-tools = [pinecone_search]
-
-# Load ReAct prompt and create agent
 prompt_template = hub.pull("hwchase17/react")
 agent = create_react_agent(llm, tools, prompt_template)
-agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
+agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True, handle_parsing_errors=True)
 
 def profile_analysis_node(state: FarmerState) -> Dict[str, Any]:
     logger.info("[Profile Analysis] Starting analysis of farmer profile.")
@@ -91,22 +82,27 @@ def react_agent_node(state: FarmerState) -> Dict[str, Any]:
     logger.info("[ReAct Agent] Starting agent to suggest schemes from Pinecone.")
     profile = state["profile"]
     combined_input = f"""
-    Given the farmer profile: {profile}, suggest 4-6 agricultural schemes from the Pinecone database. Use the pinecone_search tool to retrieve relevant schemes. Reason step-by-step to:
-    1. Search for schemes matching the profile (e.g., land size, crop type, irrigation).
-    2. Verify eligibility based on profile details.
-    3. Provide recommendations with quantified benefits (e.g., subsidy amounts) and steps.
-    Use markdown with headers (## Scheme Name).
-    """
+    You're an expert on Indian agricultural schemes. Given a farmer's profile and scheme data, provide 4-6 detailed recommendations. For each:
+        - Confirm eligibility with profile specifics (e.g., '2 hectares = small farmer', 'rain-fed needs insurance').
+        - Provide steps with URLs (e.g., https://pmkisan.gov.in) or local instructions (e.g., 'Visit your district office').
+        Include national schemes (PM-KISAN, PMFBY, SMAM) and state-specific ones (e.g., Maha DBT for Maharashtra). Use markdown with headers (## Scheme Name).
+    If farmer's profile is not provided, then suggest the schemes from the database that are relevant for the farmers.
+    Remember that don't suggest only the popular one's that already everybody knows like PM-Kisan, etc.
+
+    **Important Note** - You must have to provide schemes in the end, even they lacks some information. 
+
+    Example:
+    
+    """ 
+    # Farmer-profile: {profile}
 
     try:
         response = agent_executor.invoke({"input": combined_input})
         logger.info("[ReAct Agent] Agent response: %s", response["output"][:100] if "output" in response else "No output")
 
-        # Parse agent response to extract schemes and recommendations
         schemes = []
         recommendations = response.get("output", "No recommendations generated due to insufficient Pinecone data.")
 
-        # Extract schemes from tool outputs
         tool_outputs = response.get("intermediate_steps", [])
         for step in tool_outputs:
             if isinstance(step[1], list) and all(isinstance(doc, Document) for doc in step[1]):
@@ -127,14 +123,54 @@ def react_agent_node(state: FarmerState) -> Dict[str, Any]:
         logger.error("[ReAct Agent] Execution failed: %s", str(e))
         return {"schemes": [], "recommendations": "Error generating recommendations.", "visuals": []}
 
+def refine_agent_node(state: FarmerState) -> Dict[str, Any]:
+    logger.info("[Refine Agent] Starting refinement of recommendations.")
+    agent2 = create_react_agent(llm, tools2, prompt_template)
+    agent_executor2 = AgentExecutor(agent=agent2, tools=tools2, verbose=True, handle_parsing_errors=True)
+
+    schemes = state["recommendations"]
+    combined_input = f"""
+        You're an expert in completing and enhancing agricultural scheme information for Indian farmers.
+        Your job is to fill in or verify missing or vague details using reliable online data. Use bullet points for clarity.
+        Prefix each scheme with a markdown heading: `# Scheme Name`.
+        You have to search for each scheme one by one with your tool. One at a time.
+
+        Even if you can't find much information, provide your best effort using general knowledge. Make sure it's helpful to the farmer.
+
+        <Schemes>
+        {schemes}
+        </Schemes>
+    """
+
+    try:
+        response = agent_executor2.invoke({"input": combined_input})
+        refined_output = response.get("output", "No detailed information found.")
+        logger.info("[Refine Agent] Refined recommendations: %s", refined_output[:100])
+        return {
+            "profile": state["profile"],
+            "schemes": state["schemes"],
+            "recommendations": refined_output,
+            "visuals": state.get("visuals", [])
+        }
+    except Exception as e:
+        logger.error("[Refine Agent] Execution failed: %s", str(e))
+        return {
+            "profile": state["profile"],
+            "schemes": state["schemes"],
+            "recommendations": "Error while refining recommendations.",
+            "visuals": state.get("visuals", [])
+        } 
+
 workflow = StateGraph(FarmerState)
 
 workflow.add_node("profile_analysis", profile_analysis_node)
 workflow.add_node("react_agent", react_agent_node)
+workflow.add_node("refine_agent", refine_agent_node)
 
 workflow.set_entry_point("profile_analysis")
 workflow.add_edge("profile_analysis", "react_agent")
-workflow.add_edge("react_agent", END)
+workflow.add_edge("react_agent", "refine_agent")
+workflow.add_edge("refine_agent", END)
 
 app = workflow.compile()
 
